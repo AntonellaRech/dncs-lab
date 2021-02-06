@@ -174,23 +174,23 @@ So I'm gonna use enp0s8 and enp0s9 for router-2 (the same procediment was done w
 
 ### My Network Design
 
-|  HOST  | SUBNET ADDRESSES |  IP-CONFIG   | PORTS AVAILABLE|
-| ------ | ---------------- | ------------ | -------------- |
-| HOST-A |  192.168.0.0/23  | 192.168.0.65 |     enp0s8     |
-| HOST-B |  192.168.4.0/25  | 192.168.4.42 |     enp0s8     |
-| HOST-C |  192.168.2.0/23  | 192.168.2.111|     enp0s8     |
+|  HOST  | SUBNET ADDRESSES |  IP-CONFIG   | INTERFACE AVAILABLE|
+| ------ | ---------------- | ------------ | ------------------ |
+| HOST-A |  192.168.0.0/23  | 192.168.0.65 |       enp0s8       |
+| HOST-B |  192.168.4.0/25  | 192.168.4.42 |       enp0s8       |
+| HOST-C |  192.168.2.0/23  | 192.168.2.111|       enp0s8       |
 
-|  ROUTER  |      ADDRESSES     | SUBNET IP-CONFIG | PORTS AVAILABLE|
-| -------- | -------------------| ---------------- | -------------- |
-| ROUTER-1 |    10.0.0.1/30     |    192.168.0.1   | enp0s8, enp0s9 |
-| ROUTER-2 |    10.0.0.2/30     |    192.168.2.1   | enp0s8, enp0s9 |
+|  ROUTER  |      ADDRESSES     | SUBNET IP-CONFIG | INTERFACE AVAILABLE|
+| -------- | -------------------| ---------------- | ------------------ |
+| ROUTER-1 |    10.0.0.1/30     |    192.168.0.1   | enp0s8, enp0s9     |
+| ROUTER-2 |    10.0.0.2/30     |    192.168.2.1   | enp0s8, enp0s9     |
 
 (router-1 : 192.168.0.1 subnet-A, 192.168.4.1 subnet-B )
 
-| SWITCH |  ASSIGNED PORTS  |     PORT TAG     |
-| ------ | ---------------- | ---------------- |
-| HOST-A |      enp0s9      |     enp0s8.1     |
-| HOST-B |      enp0s10     |     enp0s8.2     |
+| SWITCH |  ASSIGNED INTERFACE  |    INTERFACE TAG     |
+| ------ | -------------------- | -------------------- |
+| HOST-A |      enp0s9          |     enp0s8.1         |
+| HOST-B |      enp0s10         |     enp0s8.2         |
 
 ## VAGRANTFILE CONFIGURATION
 
@@ -205,18 +205,120 @@ As we can see every component must have this kind of file, down here they are al
 ## DEVICES CONFIGURATION
 
 ### HOST-A
+ In file "host-a.sh" i wrote the following commands.
+ First I set a parameter in Kernel to specify what kind of protocol to use with this line
+ ```sudo sysctl -w net.ipv4.ip_forward=1 ``` 
+ that enable the ip forwarding with ip version 4 (or ipv4).
+ Then I used ```sudo ip addr add 192.168.0.65/23 dev enp0s8 ``` to assign a group of IP addresses to an interface. In my case the "Subnet-A" to the interface enp0s8.
+ This line ```sudo ip link set dev enp0s8 up``` help me to start and work with the network interface.
+ Finally, this is the command to set static routes, which help packets directed to another network to be sent correctly to routers ```sudo ip route add [networkaddress\length] via [routeraddress]```
+ 
+ ```export DEBIAN_FRONTEND=noninteractive
+apt-get update
+sudo sysctl -w net.ipv4.ip_forward=1
+
+# Startup commands for host-a go here
+
+sudo ip addr add 192.168.0.65/23 dev enp0s8
+sudo ip link set dev enp0s8 up
+
+#route table gateway
+
+sudo ip route add 192.168.4.0/25 via 192.168.0.1
+sudo ip route add 10.0.0.0/30 via 192.168.0.1
+sudo ip route add 192.168.2.0/23 via 192.168.0.1 
+```
+
 ### HOST-B
-### HOST-C
+As in the file "host-a.sh", the "host-b.sh" is pretty similar. Only the group of address  and the static routes are different.
+
+```
+export DEBIAN_FRONTEND=noninteractive
+sudo apt-get update
+sudo sysctl -w net.ipv4.ip_forward=1
+
+# Startup commands for host-b go here
+
+sudo ip addr add 192.168.4.42/25 dev enp0s8
+sudo ip link set dev enp0s8 up
+
+#route table
+
+sudo ip route add 192.168.0.0/23 via 192.168.4.1
+sudo ip route add 192.168.2.0/23 via 192.168.4.1
+sudo ip route add 10.0.0.0/30 via 192.168.4.1
+```
+
 ### SWITCH
+
+In the file "switch.sh" these lines allow to use the openvswitch command lines properly.
+```
+apt-get install -y tcpdump
+apt-get install -y openvswitch-common openvswitch-switch apt-transport-https ca-certificates curl software-properties-common
+```
+I configured the file with this line ```sudo ovs-vsctl add-br switch-1``` to create a bridge in the switch database then with this ```sudo ovs-vsctl add-port switch-1 enp0s8``` i binded an interface to a bridge and adding a tag to convert ports into access port on specified VLAN.
+So the interface enp0s9 is connected to the host-a while the interface enp0s10 is connected to the host-b and the interface enp0s8 is connected to router-1. The switch is now operating between the two host and the router-1. 
+
+```
+export DEBIAN_FRONTEND=noninteractive
+apt-get update
+apt-get install -y tcpdump
+apt-get install -y openvswitch-common openvswitch-switch apt-transport-https ca-certificates curl software-properties-common
+
+# Startup commands for switch go here
+
+sudo ovs-vsctl add-br switch-1
+sudo ovs-vsctl add-port switch-1 enp0s8
+sudo ovs-vsctl add-port switch-1 enp0s9 tag="1"
+sudo ovs-vsctl add-port switch-1 enp0s10 tag="2"
+sudo ip link set dev enp0s8 up
+sudo ip link set dev enp0s9 up 
+sudo ip link set dev enp0s10 up 
+```
+
 ### ROUTER-1
+
+In file "router-1.sh"  i added the addresses of router-1 and router-2 in the same interface (enp0s9) with the command ```sudo ip addr add 10.0.0.1/30 dev enp0s9``` so they can be connected. Also i need to manage the traffic of the switch came from the two different gateway addresses, respectively one of network of host-a and the other of the host-b. Here there are the lines to rename the interface connected to router-1 and switch and adding the identification tags to create the vlans that separate the traffic of host-a from host-b.
+```
+sudo ip link add link enp0s8 name enp0s8.1 type vlan id 1
+sudo ip link add link enp0s8 name enp0s8.2 type vlan id 2
+```
+Now that we have the vlans we can associated a group of address for each vlan, the number 1 with subnet-A and the number 2 with subnet-B.
+```
+sudo ip addr add 192.168.0.1/23 dev enp0s8.1
+sudo ip addr add 192.168.4.1/25 dev enp0s8.2
+```
+These actions subdivide the subnet of router-1 in two more subnets managed by the switch.
+
+```
+export DEBIAN_FRONTEND=noninteractive
+apt-get update
+sudo sysctl -w net.ipv4.ip_forward=1
+
+# Startup commands for router-1 go here
+
+sudo ip addr add 10.0.0.1/30 dev enp0s9
+sudo ip link add link enp0s8 name enp0s8.1 type vlan id 1
+sudo ip link add link enp0s8 name enp0s8.2 type vlan id 2
+sudo ip addr add 192.168.0.1/23 dev enp0s8.1
+sudo ip addr add 192.168.4.1/25 dev enp0s8.2
+sudo ip link set dev enp0s8 up
+sudo ip link set dev enp0s9 up
+
+
+#route table
+sudo ip route add 192.168.2.0/23 via 10.0.0.2
+```
+
 ### ROUTER-2
+### HOST-C
 
 ## CONCLUSION
 
 ### FINAL MOVES
 
 Now that everything is done i'm gonna check if it works by using the command line ```ping [address]``` after logging into each device.
-Whether it works works the last thing to do is enter into host-a or host-b and make a request to host-c by using the command ```curl [address]``` (in my case 192.168.2.111) and receive an html file like this one:
+Whether it works the last thing to do is enter into host-a or host-b and make a request to host-c by using the command ```curl [address]``` (in my case 192.168.2.111) and receive an html file like this one:
 
 ```
 <!DOCTYPE html>
