@@ -178,7 +178,7 @@ So I'm gonna use enp0s8 and enp0s9 for router-2 (the same procediment was done w
 | ------ | ---------------- | ------------ | ------------------ |
 | HOST-A |  192.168.0.0/23  | 192.168.0.65 |       enp0s8       |
 | HOST-B |  192.168.4.0/25  | 192.168.4.42 |       enp0s8       |
-| HOST-C |  192.168.2.0/23  | 192.168.2.111|       enp0s8       |
+| HOST-C |  192.168.2.0/23  | 192.168.2.11 |       enp0s8       |
 
 |  ROUTER  |      ADDRESSES     | SUBNET IP-CONFIG | INTERFACE AVAILABLE|
 | -------- | -------------------| ---------------- | ------------------ |
@@ -209,8 +209,8 @@ As we can see every component must have this kind of file, down here they are al
  First I set a parameter in Kernel to specify what kind of protocol to use with this line
  ```sudo sysctl -w net.ipv4.ip_forward=1 ``` 
  that enable the ip forwarding with ip version 4 (or ipv4).
- Then I used ```sudo ip addr add 192.168.0.65/23 dev enp0s8 ``` to assign a group of IP addresses to an interface. In my case the "Subnet-A" to the interface enp0s8.
- This line ```sudo ip link set dev enp0s8 up``` help me to start and work with the network interface.
+ Then I used ```sudo ip addr add 192.168.0.65/23 dev enp0s8 ``` to assign a group of IP addresses to an interface via the gateway address. In my case the "Subnet-A" to the interface enp0s8.
+ This line ```sudo ip link set dev enp0s8 up``` help me to operate the network interface.
  Finally, this is the command to set static routes, which help packets directed to another network to be sent correctly to routers ```sudo ip route add [networkaddress\length] via [routeraddress]```
  
  ```export DEBIAN_FRONTEND=noninteractive
@@ -230,8 +230,8 @@ sudo ip route add 192.168.2.0/23 via 192.168.0.1
 ```
 
 ### HOST-B
-As in the file "host-a.sh", the "host-b.sh" is pretty similar. Only the group of address  and the static routes are different.
-
+As in file "host-a.sh", the "host-b.sh" is pretty similar. Only the address added to interface enp0s8 and the static routes are different, 
+as we can see this host is now accessible from router-1.
 ```
 export DEBIAN_FRONTEND=noninteractive
 sudo apt-get update
@@ -251,13 +251,14 @@ sudo ip route add 10.0.0.0/30 via 192.168.4.1
 
 ### SWITCH
 
-In the file "switch.sh" these lines allow to use the openvswitch command lines properly.
+In file "switch.sh" these lines allow to use the openvswitch command lines properly.
 ```
 apt-get install -y tcpdump
 apt-get install -y openvswitch-common openvswitch-switch apt-transport-https ca-certificates curl software-properties-common
 ```
-I configured the file with this line ```sudo ovs-vsctl add-br switch-1``` to create a bridge in the switch database then with this ```sudo ovs-vsctl add-port switch-1 enp0s8``` i binded an interface to a bridge and adding a tag to convert ports into access port on specified VLAN.
-So the interface enp0s9 is connected to the host-a while the interface enp0s10 is connected to the host-b and the interface enp0s8 is connected to router-1. The switch is now operating between the two host and the router-1. 
+I configured the file with this line ```sudo ovs-vsctl add-br switch-1``` to create a bridge in the switch database then with this ```sudo ovs-vsctl add-port switch-1 enp0s8``` i binded an interface to a bridge and added a tag to convert ports into access port on specified VLAN.
+For example in this one ```sudo ovs-vsctl add-port switch-1 enp0s9 tag="1"``` there is an access port connected to interface enp0s9 that is identified with tag 1.
+In my case the interface enp0s9 is connected to the host-a while the interface enp0s10 is connected to the host-b and the interface enp0s8 is connected to router-1. The switch is now operating between the two host and the router-1. 
 
 ```
 export DEBIAN_FRONTEND=noninteractive
@@ -283,13 +284,13 @@ In file "router-1.sh"  i added the addresses of router-1 and router-2 in the sam
 sudo ip link add link enp0s8 name enp0s8.1 type vlan id 1
 sudo ip link add link enp0s8 name enp0s8.2 type vlan id 2
 ```
-Now that we have the vlans we can associated a group of address for each vlan, the number 1 with subnet-A and the number 2 with subnet-B.
+Now that we have the vlans we can associated a group of address for each vlan by adding the gateway ip of subnet-A and subnet-B.
 ```
 sudo ip addr add 192.168.0.1/23 dev enp0s8.1
 sudo ip addr add 192.168.4.1/25 dev enp0s8.2
 ```
 These actions subdivide the subnet of router-1 in two more subnets managed by the switch.
-
+The static route point the way to router-2.
 ```
 export DEBIAN_FRONTEND=noninteractive
 apt-get update
@@ -311,7 +312,59 @@ sudo ip route add 192.168.2.0/23 via 10.0.0.2
 ```
 
 ### ROUTER-2
-### HOST-C
+
+In file "router-2.sh" i added the address of router-2 to the interface enp0s9 where there is the other router connected, ```sudo ip addr add 10.0.0.2/30 dev enp0s9```.
+Right below ```sudo ip addr add 192.168.2.1/23 dev enp0s8``` i connected the router-2 to the subnet-C by the gateway address just written.
+Now in order to make accessible the host-c from host-a or host-b there are some static routes to implement that show the correct way to packets during the sending.
+
+```
+export DEBIAN_FRONTEND=noninteractive
+apt-get update
+sudo sysctl -w net.ipv4.ip_forward=1
+# Startup commands for router-2 go here
+
+sudo ip addr add 10.0.0.2/30 dev enp0s9
+sudo ip addr add 192.168.2.1/23 dev enp0s8
+sudo ip link set dev enp0s9 up
+sudo ip link set dev enp0s8 up
+
+#route table
+sudo ip route add 192.168.0.0/23 via 10.0.0.1
+sudo ip route add 192.168.4.0/25 via 10.0.0.1
+```
+
+### HOST-C 
+
+In file "host-c.sh" i added the ip address to the interface enp0s8 so it make easy to be reachable from router-2.
+Differently from host-a and hot-b, this host has a docker image that has to be load so i need to install the most recent versione of docker ```sudo apt -y install docker.io``` and initialize the imagine by loading it ```sudo docker pull dustnic82/nginx-test``` and by running it ```sudo docker run --name nginx -p 80:80 -d dustnic82/nginx-test```.
+It's important to tell the system to enable docker and runs it immediatly at startup with these lines 
+```
+sudo systemctl start docker
+sudo systemctl enable docker
+```
+Finally the static routes are implemented for each network not directly connected to this host through router-2.
+
+```
+export DEBIAN_FRONTEND=noninteractive
+sudo apt-get update
+sudo sysctl -w net.ipv4.ip_forward=1
+# Startup commands for host-c go here
+
+sudo ip addr add 192.168.2.11/23 dev enp0s8
+
+sudo apt -y install docker.io
+sudo systemctl start docker
+sudo systemctl enable docker
+sudo docker pull dustnic82/nginx-test
+sudo docker run --name nginx -p 80:80 -d dustnic82/nginx-test
+
+sudo ip link set dev enp0s8 up
+
+#route table
+sudo ip route add 192.168.0.0/23 via 192.168.2.1
+sudo ip route add 192.168.4.0/25 via 192.168.2.1
+sudo ip route add 10.0.0.0/30 via 192.168.2.1
+```
 
 ## CONCLUSION
 
