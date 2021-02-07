@@ -480,7 +480,6 @@ function changeCookie() {
 
 ### RESULT
 Here the html page rendered.
-https://github.com/AntonellaRech/dncs-lab/master/RESULT.html
-https://rawgit.com/AntonellaRech/dncs-lab/master/RESULT.html
+https://github.com/AntonellaRech/dncs-lab/blob/master/RESULT.html
 
-
+ http://htmlpreview.github.io/?https://github.com/AntonellaRech/dncs-lab/blob/master/RESULT.html
