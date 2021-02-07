@@ -126,7 +126,7 @@ The assignment deliverable consists of a Github repository containing:
 - ROUTER-2
 - SWITCH
 
-
+![Image](design.png)
 
 ### Subnetting
 
