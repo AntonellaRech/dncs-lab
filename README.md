@@ -371,7 +371,7 @@ sudo ip route add 10.0.0.0/30 via 192.168.2.1
 ### FINAL MOVES
 
 Now that everything is done i'm gonna check if it works by using the command line ```ping [address]``` after logging into each device.
-Whether it works the last thing to do is enter into host-a or host-b and make a request to host-c by using the command ```curl [address]``` (in my case 192.168.2.111) and receive an html file like this one:
+Whether it works the last thing to do is enter into host-a or host-b and make a request to host-c by using the command ```curl [address]``` (in my case 192.168.2.11) and receive an html file like this one:
 
 ```
 <!DOCTYPE html>
@@ -479,5 +479,8 @@ function changeCookie() {
 ```
 
 ### RESULT
+Here the html page rendered.
+https://github.com/AntonellaRech/dncs-lab/master/RESULT.html
+https://rawgit.com/AntonellaRech/dncs-lab/master/RESULT.html
 
 
